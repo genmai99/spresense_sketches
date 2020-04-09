@@ -16,18 +16,35 @@
  *  License along with this library; if not, write to the Free Software
  *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
-
+ 
+#include <SDHCI.h>
 #include <BMI160Gen.h>
 #include <MediaRecorder.h>
 #include <MemoryUtil.h>
 
+#define RECORD_FILE_NAME "data.csv"
 #define ANALOG_MIC_GAIN  0 /* +0dB, Range:-78.5 to +21dB */
 
+SDClass theSD;
 MediaRecorder *theRecorder;
 
+/*
+ * 16bit Linear PCM: 48000Hz*16bit*1ch(mono)/1000=768 kbps
+ * 768kbps*4ch=3072kbps
+ * Size 1536?
+ */
 static const int32_t recoding_frames = 400;
-static const int32_t buffer_size = 6144; /*768sample,4ch,16bit*/
+static const int32_t buffer_size = 6144; 
 static uint8_t       s_buffer[buffer_size];
+
+/* Time in ms unit */
+unsigned long ms_time=0;
+
+/* Define the filename */
+File s_myFile;
+
+/* Data in the string mode */
+String dataString = "";
 
 bool ErrEnd = false;
 
@@ -36,7 +53,6 @@ bool ErrEnd = false;
  *
  * When audio internal error occurc, this function will be called back.
  */
-
 void mediarecorder_attention_cb(const ErrorAttentionParam *atprm)
 {
   puts("Attention!");
@@ -48,10 +64,11 @@ void mediarecorder_attention_cb(const ErrorAttentionParam *atprm)
 }
 
 /**
- *  Recording bit rate
+ * Recording bit rate
  * Set in bps.
+ * Bitrate is effective only when mp3 recording
  */
-static const uint32_t recoding_bitrate = 8000;
+static const uint32_t recoding_bitrate = 96000;
 
 /** 
  * Sampling rate
@@ -80,7 +97,6 @@ static const uint8_t  recoding_bit_length = 16;
  *
  * @return true on success, false otherwise
  */
-
 static bool mediarecorder_done_callback(AsRecorderEvent event, uint32_t result, uint32_t sub_result)
 {
   printf("mp cb %x %x %x\n", event, result, sub_result);
@@ -114,12 +130,10 @@ void setup()
 
   
   /* Initialize memory pools and message libs */
-
   initMemoryPools();
   createStaticPools(MEM_LAYOUT_RECORDER);
 
   /* start audio system */
-
   theRecorder = MediaRecorder::getInstance();
 
   theRecorder->begin(mediarecorder_attention_cb);
@@ -127,11 +141,9 @@ void setup()
   puts("initialization MediaRecorder");
 
   /* Set capture clock */
-
   theRecorder->setCapturingClkMode(MEDIARECORDER_CAPCLK_NORMAL);
 
   /* Activate Objects. Set output device to Speakers/Headphones */
-
   theRecorder->activate(AS_SETRECDR_STS_INPUTDEVICE_MIC, mediarecorder_done_callback);
 
   usleep(100 * 1000); /* waiting for Mic startup */
@@ -140,19 +152,40 @@ void setup()
    * Initialize recorder to decode stereo wav stream with 48kHz sample rate
    * Search for SRC filter in "/mnt/sd0/BIN" directory
    */
-
   theRecorder->init(AS_CODECTYPE_LPCM,
                     recoding_cannel_number,
                     recoding_sampling_rate,
                     recoding_bit_length,
                     recoding_bitrate, /* Bitrate is effective only when mp3 recording */
                     "/mnt/sd0/BIN");
+
+
+  /* Open file for data write on SD card */
+  theSD.begin();
+
+  if (theSD.exists(RECORD_FILE_NAME))
+    {
+      printf("Remove existing file [%s].\n", RECORD_FILE_NAME);
+      theSD.remove(RECORD_FILE_NAME);
+    }
+
+  s_myFile = theSD.open(RECORD_FILE_NAME, FILE_WRITE);
+
+  /* Verify file open */   
+  if (!s_myFile)
+    {
+      printf("File open error\n");
+      exit(1);
+    }
+
+  printf("Open! [%s]\n", RECORD_FILE_NAME);
+
   
-  /* Set Gain */
+  /* Set Gain */ 
   theRecorder->setMicGain(ANALOG_MIC_GAIN);
 
 
-  /* Start Recorder */
+  /* Start Recorder */  
   theRecorder->start();
   puts("Recording Start!");
   
@@ -161,11 +194,9 @@ void setup()
 /**
  * @brief Audio signal process (Modify for your application)
  */
-
 void signal_process(uint32_t size)
 {
-  /* Put any signal process */
-
+  /* Put any signal process */ 
   printf("Size %d [%02x %02x %02x %02x %02x %02x %02x %02x ...]\n",
          size,
          s_buffer[0],
@@ -181,7 +212,6 @@ void signal_process(uint32_t size)
 /**
  * @brief Execute frames for FIFO empty
  */
-
 void execute_frames()
 {
   uint32_t read_size = 0;
@@ -200,7 +230,6 @@ void execute_frames()
 /**
  * @brief Execute one frame
  */
-
 err_t execute_aframe(uint32_t* size)
 {
   err_t err = theRecorder->readFrames(s_buffer, buffer_size, size);
@@ -216,20 +245,37 @@ err_t execute_aframe(uint32_t* size)
 /**
  * @brief Capture frames of PCM data into buffer
  */
-
 void loop() {
 
   /* For BMI160 */
-  float ax, ay, az;   //scaled accelerometer values
-  float gx, gy, gz; //scaled Gyro values
+  float acc[3];   //scaled accelerometer values
+  float gyro[3];  //scaled Gyro values
   
   /* For Analog mic */
   static int32_t total_size = 0;
   uint32_t read_size = 0;
 
-  // read accelerometer and gyro measurements from device, scaled to the configured range
-  BMI160.readAccelerometerScaled(ax, ay, az);
-  BMI160.readGyroScaled(gx, gy, gz);
+  /* time (msec) after the program was initiated */
+  ms_time=millis();
+
+  /* read accelerometer and gyro measurements from device, scaled to the configured range */
+  BMI160.readAccelerometerScaled(acc[0], acc[1], acc[2]);
+  BMI160.readGyroScaled(gyro[0], gyro[1], gyro[2]);
+  
+  /* make a time data to send in string mode */
+  dataString=String(ms_time,DEC);
+
+  /* make a acc data to send in string mode */
+  for(int i=0; i<3; i++){
+    dataString += ","; 
+    dataString=String(acc[i],DEC);
+  }
+
+  /* make a gyro data to send in string mode */
+  for(int i=0; i<3; i++){
+    dataString += ","; 
+    dataString=String(gyro[i],DEC);
+  }
 
   /* Execute audio data */
   err_t err = execute_aframe(&read_size);
@@ -242,15 +288,23 @@ void loop() {
   else if (read_size>0)
     {
       total_size += read_size;
-      printf("ax:%.2f, ay:%.2f, az:%.2f, gx:%.2f, gy:%.2f, gz:%.2f\n", ax, ay, az, gx, gy, gz);
+      
+      /* make a audio data to send in string mode */
+      /*
+      for(int i=0; i<8; i++){
+        dataString += ","; 
+        dataString=String(s_buffer[i],DEC);
+        }*/
+      
+      //printf("ax:%.2f, ay:%.2f, az:%.2f, gx:%.2f, gy:%.2f, gz:%.2f\n", ax, ay, az, gx, gy, gz);
     }
 
   /* This sleep is adjusted by the time to write the audio stream file.
      Please adjust in according with the processing contents
      being processed at the same time by Application.
   */
+  
 //  usleep(10000);
-
 
   /* Stop Recording */
   if (total_size > (recoding_frames*buffer_size))
@@ -274,6 +328,14 @@ void loop() {
   return;
 
 exitRecording:
+
+  int ret = s_myFile.write((uint8_t*)&s_buffer, read_size);
+  if (ret < 0){
+    puts("File write error.");
+    err = MEDIARECORDER_ECODE_FILEACCESS_ERROR;
+  }
+
+  s_myFile.close();
 
   theRecorder->deactivate();
   theRecorder->end();
