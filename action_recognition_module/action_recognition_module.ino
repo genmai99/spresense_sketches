@@ -22,16 +22,18 @@
 #include <MediaRecorder.h>
 #include <MemoryUtil.h>
 
-#define RECORD_FILE_NAME "data.csv"
-#define ANALOG_MIC_GAIN  0 /* +0dB, Range:-78.5 to +21dB */
+#define RECORD_FILE_NAME "data.txt"
+#define ANALOG_MIC_GAIN  210 /* Range:-785(-78.5dB) to 210(+21.0dB) */
 
 SDClass theSD;
 MediaRecorder *theRecorder;
 
+/* Define the filename */
+File myFile;
+
 /*
- * 16bit Linear PCM: 48000Hz*16bit*1ch(mono)/1000=768 kbps
- * 768kbps*4ch=3072kbps
- * Size 1536?
+ * Sample's buffer_size: 768sample/frame*16bit(2Byte)*4ch = 6144
+ * MySetting: 768sample/frame*16bit(2Byte)*1ch = 1536
  */
 static const int32_t recoding_frames = 400;
 static const int32_t buffer_size = 6144; 
@@ -39,9 +41,6 @@ static uint8_t       s_buffer[buffer_size];
 
 /* Time in ms unit */
 unsigned long ms_time=0;
-
-/* Define the filename */
-File s_myFile;
 
 /* Data in the string mode */
 String dataString = "";
@@ -114,7 +113,6 @@ static bool mediarecorder_done_callback(AsRecorderEvent event, uint32_t result, 
  */
 void setup()
 {
-
   /* initialize IMU160 device */
   puts("Initializing IMU device...");
   BMI160.begin();
@@ -161,18 +159,23 @@ void setup()
 
 
   /* Open file for data write on SD card */
-  theSD.begin();
-
+  while (!theSD.begin()) {
+    ; /* wait until SD card is mounted. */
+  }
+  
   if (theSD.exists(RECORD_FILE_NAME))
     {
       printf("Remove existing file [%s].\n", RECORD_FILE_NAME);
       theSD.remove(RECORD_FILE_NAME);
     }
+  
+  /* Create a new directory */
+  theSD.mkdir("dir/");
 
-  s_myFile = theSD.open(RECORD_FILE_NAME, FILE_WRITE);
+  myFile = theSD.open(RECORD_FILE_NAME, FILE_WRITE);
 
   /* Verify file open */   
-  if (!s_myFile)
+  if (!myFile)
     {
       printf("File open error\n");
       exit(1);
@@ -180,10 +183,8 @@ void setup()
 
   printf("Open! [%s]\n", RECORD_FILE_NAME);
 
-  
   /* Set Gain */ 
   theRecorder->setMicGain(ANALOG_MIC_GAIN);
-
 
   /* Start Recorder */  
   theRecorder->start();
@@ -263,19 +264,21 @@ void loop() {
   BMI160.readGyroScaled(gyro[0], gyro[1], gyro[2]);
   
   /* make a time data to send in string mode */
-  dataString=String(ms_time,DEC);
+  dataString += String(ms_time,DEC);
 
   /* make a acc data to send in string mode */
   for(int i=0; i<3; i++){
     dataString += ","; 
-    dataString=String(acc[i],DEC);
+    dataString += String(acc[i],DEC);
   }
 
   /* make a gyro data to send in string mode */
   for(int i=0; i<3; i++){
     dataString += ","; 
-    dataString=String(gyro[i],DEC);
+    dataString += String(gyro[i],DEC);
   }
+  
+  dataString += "\n";
 
   /* Execute audio data */
   err_t err = execute_aframe(&read_size);
@@ -297,6 +300,7 @@ void loop() {
         }*/
       
       //printf("ax:%.2f, ay:%.2f, az:%.2f, gx:%.2f, gy:%.2f, gz:%.2f\n", ax, ay, az, gx, gy, gz);
+
     }
 
   /* This sleep is adjusted by the time to write the audio stream file.
@@ -329,13 +333,16 @@ void loop() {
 
 exitRecording:
 
-  int ret = s_myFile.write((uint8_t*)&s_buffer, read_size);
+  /* Save data to SD card*/
+  //int ret = myFile.write((uint8_t*)&s_buffer, read_size);
+  int ret = myFile.println(dataString);
+  
   if (ret < 0){
     puts("File write error.");
     err = MEDIARECORDER_ECODE_FILEACCESS_ERROR;
   }
 
-  s_myFile.close();
+  myFile.close();
 
   theRecorder->deactivate();
   theRecorder->end();
