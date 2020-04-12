@@ -22,7 +22,9 @@
 #include <MediaRecorder.h>
 #include <MemoryUtil.h>
 
-#define RECORD_FILE_NAME "data.txt"
+#define RECORD_FILE_NAME "sensor_data.txt"
+#define SENSOR_DIRECTORY_NAME "result_sensor/"
+#define PCM_DIRECTORY_NAME "result_mic/"
 #define ANALOG_MIC_GAIN  210 /* Range:-785(-78.5dB) to 210(+21.0dB) */
 
 SDClass theSD;
@@ -31,6 +33,13 @@ MediaRecorder *theRecorder;
 /* Define the filename */
 File myFile;
 
+/* Time in ms unit */
+unsigned long ms_time=0;
+
+/* Data in the string mode */
+String sensor_file_path = SENSOR_DIRECTORY_NAME; /* Data string for save directory */
+String sensor_data = "time, ax, ax, az, gx, gy, gz\n"; /* Data string for acc and gyro*/
+
 /*
  * Sample's buffer_size: 768sample/frame*16bit(2Byte)*4ch = 6144
  * MySetting: 768sample/frame*16bit(2Byte)*1ch = 1536
@@ -38,12 +47,6 @@ File myFile;
 static const int32_t recoding_frames = 400;
 static const int32_t buffer_size = 6144; 
 static uint8_t       s_buffer[buffer_size];
-
-/* Time in ms unit */
-unsigned long ms_time=0;
-
-/* Data in the string mode */
-String dataString = "";
 
 bool ErrEnd = false;
 
@@ -157,22 +160,23 @@ void setup()
                     recoding_bitrate, /* Bitrate is effective only when mp3 recording */
                     "/mnt/sd0/BIN");
 
+  sensor_file_path += RECORD_FILE_NAME;
 
   /* Open file for data write on SD card */
   while (!theSD.begin()) {
     ; /* wait until SD card is mounted. */
   }
-  
-  if (theSD.exists(RECORD_FILE_NAME))
+
+  if (theSD.exists(sensor_file_path))
     {
       printf("Remove existing file [%s].\n", RECORD_FILE_NAME);
-      theSD.remove(RECORD_FILE_NAME);
+      theSD.remove(sensor_file_path);
     }
   
   /* Create a new directory */
-  theSD.mkdir("dir/");
+  theSD.mkdir(SENSOR_DIRECTORY_NAME);
 
-  myFile = theSD.open(RECORD_FILE_NAME, FILE_WRITE);
+  myFile = theSD.open(sensor_file_path, FILE_WRITE);
 
   /* Verify file open */   
   if (!myFile)
@@ -264,21 +268,21 @@ void loop() {
   BMI160.readGyroScaled(gyro[0], gyro[1], gyro[2]);
   
   /* make a time data to send in string mode */
-  dataString += String(ms_time,DEC);
+  sensor_data += String(ms_time,DEC);
 
   /* make a acc data to send in string mode */
   for(int i=0; i<3; i++){
-    dataString += ","; 
-    dataString += String(acc[i],DEC);
+    sensor_data += ","; 
+    sensor_data += String(acc[i],DEC);
   }
 
   /* make a gyro data to send in string mode */
   for(int i=0; i<3; i++){
-    dataString += ","; 
-    dataString += String(gyro[i],DEC);
+    sensor_data += ","; 
+    sensor_data += String(gyro[i],DEC);
   }
   
-  dataString += "\n";
+  sensor_data += "\n";
 
   /* Execute audio data */
   err_t err = execute_aframe(&read_size);
@@ -295,8 +299,8 @@ void loop() {
       /* make a audio data to send in string mode */
       /*
       for(int i=0; i<8; i++){
-        dataString += ","; 
-        dataString=String(s_buffer[i],DEC);
+        sensor_data += ","; 
+        sensor_data=String(s_buffer[i],DEC);
         }*/
       
       //printf("ax:%.2f, ay:%.2f, az:%.2f, gx:%.2f, gy:%.2f, gz:%.2f\n", ax, ay, az, gx, gy, gz);
@@ -335,7 +339,7 @@ exitRecording:
 
   /* Save data to SD card*/
   //int ret = myFile.write((uint8_t*)&s_buffer, read_size);
-  int ret = myFile.println(dataString);
+  int ret = myFile.println(sensor_data);
   
   if (ret < 0){
     puts("File write error.");
