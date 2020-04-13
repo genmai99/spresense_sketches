@@ -33,12 +33,14 @@ MediaRecorder *theRecorder;
 
 /* Define the filename */
 File myFile;
+File s_myFile;
 
 /* Time in ms unit */
 unsigned long ms_time=0;
 
 /* Data in the string mode */
 String sensor_file_path = SENSOR_DIRECTORY_NAME; /* Data string for save directory */
+String pcm_file_path = PCM_DIRECTORY_NAME; /* Data string for save directory */
 String sensor_data = "time, ax, ax, az, gx, gy, gz\n"; /* Data string for acc and gyro*/
 String pcm_data = ""; /* Data string for pcm */
 
@@ -163,6 +165,7 @@ void setup()
                     "/mnt/sd0/BIN");
 
   sensor_file_path += SENSOR_FILE_NAME;
+  pcm_file_path += PCM_FILE_NAME;
 
   /* Open file for data write on SD card */
   while (!theSD.begin()) {
@@ -174,21 +177,33 @@ void setup()
       printf("Remove existing file [%s].\n", SENSOR_FILE_NAME);
       theSD.remove(sensor_file_path);
     }
+  if (theSD.exists(pcm_file_path))
+    {
+      printf("Remove existing file [%s].\n", PCM_FILE_NAME);
+      theSD.remove(pcm_file_path);
+    }
+    
   
   /* Create a new directory */
   theSD.mkdir(SENSOR_DIRECTORY_NAME);
   theSD.mkdir(PCM_DIRECTORY_NAME);
 
   myFile = theSD.open(sensor_file_path, FILE_WRITE);
+  s_myFile = theSD.open(pcm_file_path, FILE_WRITE);
 
   /* Verify file open */   
   if (!myFile)
     {
-      printf("File open error\n");
+      printf("Sensor File open error\n");
       exit(1);
     }
-
-  printf("Open! [%s]\n", SENSOR_FILE_NAME);
+  if (!s_myFile)
+    {
+      printf("PCM File open error\n");
+      exit(1);
+    }
+  
+  printf("Open! [%s] and [%s]\n", SENSOR_FILE_NAME, PCM_FILE_NAME);
 
   /* Set Gain */ 
   theRecorder->setMicGain(ANALOG_MIC_GAIN);
@@ -205,6 +220,7 @@ void setup()
 void signal_process(uint32_t size)
 {
   /* Put any signal process */ 
+  /*
   printf("Size %d [%02x %02x %02x %02x %02x %02x %02x %02x ...]\n",
          size,
          s_buffer[0],
@@ -214,7 +230,8 @@ void signal_process(uint32_t size)
          s_buffer[4],
          s_buffer[5],
          s_buffer[6],
-         s_buffer[7]);
+         s_buffer[7]);*/
+  printf("Size %d\n", size);
 }
 
 /**
@@ -301,13 +318,12 @@ void loop() {
       total_size += read_size;
       
       /* make a audio data to send in string mode */
-      for(int i=0; i<8; i++){
+      for(int i=0; i<read_size; i++){
         pcm_data += ","; 
-        pcm_data=String(s_buffer[i],HEX);
-        }
-      
-      //printf("ax:%.2f, ay:%.2f, az:%.2f, gx:%.2f, gy:%.2f, gz:%.2f\n", ax, ay, az, gx, gy, gz);
+        pcm_data += s_buffer[i];
+      }
 
+      pcm_data += "\n";
     }
 
   /* This sleep is adjusted by the time to write the audio stream file.
@@ -343,13 +359,19 @@ exitRecording:
   /* Save data to SD card*/
   //int ret = myFile.write((uint8_t*)&s_buffer, read_size);
   int ret = myFile.println(sensor_data);
+  int s_ret = s_myFile.println(pcm_data);
   
   if (ret < 0){
-    puts("File write error.");
+    puts("Sensor file write error.");
+    err = MEDIARECORDER_ECODE_FILEACCESS_ERROR;
+  }
+  if (s_ret < 0){
+    puts("PCM file write error.");
     err = MEDIARECORDER_ECODE_FILEACCESS_ERROR;
   }
 
   myFile.close();
+  s_myFile.close();
 
   theRecorder->deactivate();
   theRecorder->end();
