@@ -22,9 +22,10 @@
 #include <MediaRecorder.h>
 #include <MemoryUtil.h>
 
-#define RECORD_FILE_NAME "sensor_data.txt"
+#define SENSOR_FILE_NAME "sensor_data.txt"
+#define PCM_FILE_NAME "pcm_data.txt"
 #define SENSOR_DIRECTORY_NAME "result_sensor/"
-#define PCM_DIRECTORY_NAME "result_mic/"
+#define PCM_DIRECTORY_NAME "result_pcm/"
 #define ANALOG_MIC_GAIN  210 /* Range:-785(-78.5dB) to 210(+21.0dB) */
 
 SDClass theSD;
@@ -39,6 +40,7 @@ unsigned long ms_time=0;
 /* Data in the string mode */
 String sensor_file_path = SENSOR_DIRECTORY_NAME; /* Data string for save directory */
 String sensor_data = "time, ax, ax, az, gx, gy, gz\n"; /* Data string for acc and gyro*/
+String pcm_data = ""; /* Data string for pcm */
 
 /*
  * Sample's buffer_size: 768sample/frame*16bit(2Byte)*4ch = 6144
@@ -160,7 +162,7 @@ void setup()
                     recoding_bitrate, /* Bitrate is effective only when mp3 recording */
                     "/mnt/sd0/BIN");
 
-  sensor_file_path += RECORD_FILE_NAME;
+  sensor_file_path += SENSOR_FILE_NAME;
 
   /* Open file for data write on SD card */
   while (!theSD.begin()) {
@@ -169,12 +171,13 @@ void setup()
 
   if (theSD.exists(sensor_file_path))
     {
-      printf("Remove existing file [%s].\n", RECORD_FILE_NAME);
+      printf("Remove existing file [%s].\n", SENSOR_FILE_NAME);
       theSD.remove(sensor_file_path);
     }
   
   /* Create a new directory */
   theSD.mkdir(SENSOR_DIRECTORY_NAME);
+  theSD.mkdir(PCM_DIRECTORY_NAME);
 
   myFile = theSD.open(sensor_file_path, FILE_WRITE);
 
@@ -185,7 +188,7 @@ void setup()
       exit(1);
     }
 
-  printf("Open! [%s]\n", RECORD_FILE_NAME);
+  printf("Open! [%s]\n", SENSOR_FILE_NAME);
 
   /* Set Gain */ 
   theRecorder->setMicGain(ANALOG_MIC_GAIN);
@@ -269,6 +272,7 @@ void loop() {
   
   /* make a time data to send in string mode */
   sensor_data += String(ms_time,DEC);
+  pcm_data += String(ms_time,DEC);
 
   /* make a acc data to send in string mode */
   for(int i=0; i<3; i++){
@@ -297,11 +301,10 @@ void loop() {
       total_size += read_size;
       
       /* make a audio data to send in string mode */
-      /*
       for(int i=0; i<8; i++){
-        sensor_data += ","; 
-        sensor_data=String(s_buffer[i],DEC);
-        }*/
+        pcm_data += ","; 
+        pcm_data=String(s_buffer[i],HEX);
+        }
       
       //printf("ax:%.2f, ay:%.2f, az:%.2f, gx:%.2f, gy:%.2f, gz:%.2f\n", ax, ay, az, gx, gy, gz);
 
