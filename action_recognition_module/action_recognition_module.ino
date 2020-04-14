@@ -23,34 +23,30 @@
 #include <MemoryUtil.h>
 
 #define SENSOR_FILE_NAME "sensor_data.txt"
+#define RECORD_FILE_NAME "Sound.wav"
 #define PCM_FILE_NAME "pcm_data.txt"
 #define SENSOR_DIRECTORY_NAME "result_sensor/"
 #define PCM_DIRECTORY_NAME "result_pcm/"
+#define WAV_DIRECTORY_NAME "result_wav/"
 #define ANALOG_MIC_GAIN  210 /* Range:-785(-78.5dB) to 210(+21.0dB) */
 
 SDClass theSD;
 MediaRecorder *theRecorder;
 
 /* Define the filename */
-File myFile;
+File sensorFile;
 File s_myFile;
+//File pcmFile /* delete */
 
 /* Time in ms unit */
 unsigned long ms_time=0;
 
 /* Data in the string mode */
 String sensor_file_path = SENSOR_DIRECTORY_NAME; /* Data string for save directory */
-String pcm_file_path = PCM_DIRECTORY_NAME; /* Data string for save directory */
 String sensor_data = "time, ax, ax, az, gx, gy, gz\n"; /* Data string for acc and gyro*/
-String pcm_data = ""; /* Data string for pcm */
-
-/*
- * Sample's buffer_size: 768sample/frame*16bit(2Byte)*4ch = 6144
- * MySetting: 768sample/frame*16bit(2Byte)*1ch = 1536
- */
-static const int32_t recoding_frames = 400;
-static const int32_t buffer_size = 6144; 
-static uint8_t       s_buffer[buffer_size];
+String record_file_path = WAV_DIRECTORY_NAME; /* Data string for save directory */
+//String pcm_file_path = PCM_DIRECTORY_NAME; /* Data string for save directory */
+//String pcm_data = ""; /* Data string for pcm */
 
 bool ErrEnd = false;
 
@@ -69,13 +65,6 @@ void mediarecorder_attention_cb(const ErrorAttentionParam *atprm)
    }
 }
 
-/**
- * Recording bit rate
- * Set in bps.
- * Bitrate is effective only when mp3 recording
- */
-static const uint32_t recoding_bitrate = 96000;
-
 /** 
  * Sampling rate
  * Set 16000 or 48000
@@ -93,6 +82,34 @@ static const uint8_t  recoding_cannel_number = 1;
  * Set 16 or 24
  */
 static const uint8_t  recoding_bit_length = 16;
+
+/* Recording time[second] */
+static const uint32_t recoding_time = 10;
+
+/* Bytes per second
+ * ex) 48000[Hz] * 1[ch] * 2[Byte](16bit/8bit) = 96000[B/s]
+ */
+static const int32_t recoding_byte_per_second = recoding_sampling_rate *
+                                                recoding_cannel_number *
+                                                recoding_bit_length / 8;
+
+/* Total recording size
+ * ex) 96000[B/s] * 10[s] = 960000[B] = 960[kB]
+ */
+static const int32_t recoding_size = recoding_byte_per_second * recoding_time;
+
+/* One frame size
+ * Calculated with 768 samples per frame.
+ * ex) 768[sample] * 1[ch] * 2Byte(16bit/8bit) = 1536
+ */
+static const uint32_t frame_size  = 768 * recoding_cannel_number * (recoding_bit_length / 8);
+
+/* Buffer size
+ * Align in 512byte units based on frame size.
+ */
+
+static const uint32_t buffer_size = (frame_size + 511) & ~511;
+static uint8_t        s_buffer[buffer_size];
 
 /**
  * @brief Recorder done callback procedure
@@ -157,54 +174,71 @@ void setup()
    * Initialize recorder to decode stereo wav stream with 48kHz sample rate
    * Search for SRC filter in "/mnt/sd0/BIN" directory
    */
-  theRecorder->init(AS_CODECTYPE_LPCM,
+  theRecorder->init(AS_CODECTYPE_WAV,
                     recoding_cannel_number,
                     recoding_sampling_rate,
                     recoding_bit_length,
-                    recoding_bitrate, /* Bitrate is effective only when mp3 recording */
+                    AS_BITRATE_8000, /* Bitrate is effective only when mp3 recording */
                     "/mnt/sd0/BIN");
 
   sensor_file_path += SENSOR_FILE_NAME;
-  pcm_file_path += PCM_FILE_NAME;
+  record_file_path += RECORD_FILE_NAME;
+  //pcm_file_path += PCM_FILE_NAME; /*delete*/
 
   /* Open file for data write on SD card */
   while (!theSD.begin()) {
     ; /* wait until SD card is mounted. */
   }
 
-  if (theSD.exists(sensor_file_path))
-    {
+  if (theSD.exists(sensor_file_path)){
       printf("Remove existing file [%s].\n", SENSOR_FILE_NAME);
       theSD.remove(sensor_file_path);
-    }
+  }
+  if (theSD.exists(record_file_path)){
+      printf("Remove existing file [%s].\n", RECORD_FILE_NAME);
+      theSD.remove(record_file_path);
+  }  
+  /* delete */
+  /*
   if (theSD.exists(pcm_file_path))
     {
       printf("Remove existing file [%s].\n", PCM_FILE_NAME);
       theSD.remove(pcm_file_path);
     }
-    
+    */
   
   /* Create a new directory */
   theSD.mkdir(SENSOR_DIRECTORY_NAME);
-  theSD.mkdir(PCM_DIRECTORY_NAME);
+  theSD.mkdir(WAV_DIRECTORY_NAME);
+  //theSD.mkdir(PCM_DIRECTORY_NAME); /* delete */
 
-  myFile = theSD.open(sensor_file_path, FILE_WRITE);
-  s_myFile = theSD.open(pcm_file_path, FILE_WRITE);
+  sensorFile = theSD.open(sensor_file_path, FILE_WRITE);
+  s_myFile = theSD.open(record_file_path, FILE_WRITE);
+  //pcmFile = theSD.open(pcm_file_path, FILE_WRITE); /* delete */
 
   /* Verify file open */   
-  if (!myFile)
-    {
-      printf("Sensor File open error\n");
-      exit(1);
-    }
-  if (!s_myFile)
+  if (!sensorFile){
+    printf("Sensor File open error\n");
+    exit(1);
+  }
+  if (!s_myFile){
+    printf("Wav File open error\n");
+    exit(1);
+  }
+  /* delete */
+  /*
+  if (!pcmFile)
     {
       printf("PCM File open error\n");
       exit(1);
-    }
+    }*/
   
-  printf("Open! [%s] and [%s]\n", SENSOR_FILE_NAME, PCM_FILE_NAME);
+  printf("Open! [%s] and [%s]\n", SENSOR_FILE_NAME, RECORD_FILE_NAME);
 
+  /* Write wav header (Write to top of file. File size is tentative.) */
+  theRecorder->writeWavHeader(s_myFile);
+  puts("Write Header!");
+  
   /* Set Gain */ 
   theRecorder->setMicGain(ANALOG_MIC_GAIN);
 
@@ -263,6 +297,11 @@ err_t execute_aframe(uint32_t* size)
     {
       signal_process(*size);
     }
+  int ret = s_myFile.write((uint8_t*)&s_buffer, *size);
+  if (ret < 0){
+    puts("File write error.");
+    err = MEDIARECORDER_ECODE_FILEACCESS_ERROR;
+  }
 
   return err;
 }
@@ -289,7 +328,7 @@ void loop() {
   
   /* make a time data to send in string mode */
   sensor_data += String(ms_time,DEC);
-  pcm_data += String(ms_time,DEC);
+  /*pcm_data += String(ms_time,DEC);*/
 
   /* make a acc data to send in string mode */
   for(int i=0; i<3; i++){
@@ -318,12 +357,13 @@ void loop() {
       total_size += read_size;
       
       /* make a audio data to send in string mode */
+      /*
       for(int i=0; i<read_size; i++){
         pcm_data += ","; 
         pcm_data += s_buffer[i];
       }
-
-      pcm_data += "\n";
+      pcm_data += "\n";*/
+      
     }
 
   /* This sleep is adjusted by the time to write the audio stream file.
@@ -334,7 +374,7 @@ void loop() {
 //  usleep(10000);
 
   /* Stop Recording */
-  if (total_size > (recoding_frames*buffer_size))
+  if (total_size > recoding_size)
     {
       theRecorder->stop();
 
@@ -356,22 +396,28 @@ void loop() {
 
 exitRecording:
 
+  theRecorder->writeWavHeader(s_myFile);
+  puts("Update Header!");
+
   /* Save data to SD card*/
-  //int ret = myFile.write((uint8_t*)&s_buffer, read_size);
-  int ret = myFile.println(sensor_data);
-  int s_ret = s_myFile.println(pcm_data);
+  //int ret = sensorFile.write((uint8_t*)&s_buffer, read_size);
+  int ret = sensorFile.println(sensor_data);
+  
+  //int s_ret = pcmFile.println(pcm_data); /* delete */
   
   if (ret < 0){
     puts("Sensor file write error.");
     err = MEDIARECORDER_ECODE_FILEACCESS_ERROR;
   }
+  /*
   if (s_ret < 0){
     puts("PCM file write error.");
     err = MEDIARECORDER_ECODE_FILEACCESS_ERROR;
-  }
+  }*/
 
-  myFile.close();
+  sensorFile.close();
   s_myFile.close();
+  //pcmFile.close(); /* delete */
 
   theRecorder->deactivate();
   theRecorder->end();
