@@ -84,7 +84,7 @@ static const uint8_t  recoding_cannel_number = 1;
 static const uint8_t  recoding_bit_length = 16;
 
 /* Recording time[second] */
-static const uint32_t recoding_time = 10;
+static const uint32_t recoding_time = 300;
 
 /* Bytes per second
  * ex) 48000[Hz] * 1[ch] * 2[Byte](16bit/8bit) = 96000[B/s]
@@ -363,6 +363,7 @@ void loop() {
         pcm_data += s_buffer[i];
       }
       pcm_data += "\n";*/
+      printf("%d", ms_time);
       
     }
 
