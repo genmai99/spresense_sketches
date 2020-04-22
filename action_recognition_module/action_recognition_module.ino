@@ -64,7 +64,7 @@ void mediarecorder_attention_cb(const ErrorAttentionParam *atprm)
  * Sampling rate
  * Set 16000 or 48000
  */
-static const uint32_t recoding_sampling_rate = 16000;
+static const uint32_t recoding_sampling_rate = 48000;
 
 /** 
  * Number of input channels
@@ -257,11 +257,11 @@ void execute_frames()
 err_t execute_aframe(uint32_t* size)
 {
   err_t err = theRecorder->readFrames(s_buffer, buffer_size, size);
-/*
+
   if(((err == MEDIARECORDER_ECODE_OK) || (err == MEDIARECORDER_ECODE_INSUFFICIENT_BUFFER_AREA)) && (*size > 0)) 
     {
       signal_process(*size);
-    }*/
+    }
   int ret = s_myFile.write((uint8_t*)&s_buffer, *size);
   if (ret < 0){
     puts("File write error.");
