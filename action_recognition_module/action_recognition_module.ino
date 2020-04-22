@@ -41,7 +41,7 @@ unsigned long ms_time=0;
 /* Data in the string mode */
 String sensor_file_path = SENSOR_DIRECTORY_NAME; /* Data string for save directory */
 String record_file_path = RECORD_DIRECTORY_NAME; /* Data string for save directory */
-String sensor_data = "time, ax, ax, az, gx, gy, gz\n"; /* Data string for acc and gyro*/
+String sensor_data = "time, ax, ay, az, gx, gy, gz\n"; /* Data string for acc and gyro*/
 
 bool ErrEnd = false;
 
