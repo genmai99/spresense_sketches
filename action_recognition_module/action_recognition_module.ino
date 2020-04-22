@@ -23,12 +23,10 @@
 #include <MemoryUtil.h>
 
 #define SENSOR_FILE_NAME "sensor_data.txt"
-#define RECORD_FILE_NAME "Sound.wav"
-#define PCM_FILE_NAME "pcm_data.txt"
+#define RECORD_FILE_NAME "sound.wav"
 #define SENSOR_DIRECTORY_NAME "result_sensor/"
-#define PCM_DIRECTORY_NAME "result_pcm/"
-#define WAV_DIRECTORY_NAME "result_wav/"
-#define ANALOG_MIC_GAIN  210 /* Range:-785(-78.5dB) to 210(+21.0dB) */
+#define RECORD_DIRECTORY_NAME "result_wav/"
+#define ANALOG_MIC_GAIN 210 /* Range:-785(-78.5dB) to 210(+21.0dB) */
 
 SDClass theSD;
 MediaRecorder *theRecorder;
@@ -36,17 +34,14 @@ MediaRecorder *theRecorder;
 /* Define the filename */
 File sensorFile;
 File s_myFile;
-//File pcmFile /* delete */
 
 /* Time in ms unit */
 unsigned long ms_time=0;
 
 /* Data in the string mode */
 String sensor_file_path = SENSOR_DIRECTORY_NAME; /* Data string for save directory */
+String record_file_path = RECORD_DIRECTORY_NAME; /* Data string for save directory */
 String sensor_data = "time, ax, ax, az, gx, gy, gz\n"; /* Data string for acc and gyro*/
-String record_file_path = WAV_DIRECTORY_NAME; /* Data string for save directory */
-//String pcm_file_path = PCM_DIRECTORY_NAME; /* Data string for save directory */
-//String pcm_data = ""; /* Data string for pcm */
 
 bool ErrEnd = false;
 
@@ -69,7 +64,7 @@ void mediarecorder_attention_cb(const ErrorAttentionParam *atprm)
  * Sampling rate
  * Set 16000 or 48000
  */
-static const uint32_t recoding_sampling_rate = 48000;
+static const uint32_t recoding_sampling_rate = 16000;
 
 /** 
  * Number of input channels
@@ -84,7 +79,7 @@ static const uint8_t  recoding_cannel_number = 1;
 static const uint8_t  recoding_bit_length = 16;
 
 /* Recording time[second] */
-static const uint32_t recoding_time = 300;
+static const uint32_t recoding_time = 60;
 
 /* Bytes per second
  * ex) 48000[Hz] * 1[ch] * 2[Byte](16bit/8bit) = 96000[B/s]
@@ -149,7 +144,6 @@ void setup()
   BMI160.setGyroRange(250);
 
   puts("Initializing IMU device...done.");
-
   
   /* Initialize memory pools and message libs */
   initMemoryPools();
@@ -183,7 +177,6 @@ void setup()
 
   sensor_file_path += SENSOR_FILE_NAME;
   record_file_path += RECORD_FILE_NAME;
-  //pcm_file_path += PCM_FILE_NAME; /*delete*/
 
   /* Open file for data write on SD card */
   while (!theSD.begin()) {
@@ -198,23 +191,13 @@ void setup()
       printf("Remove existing file [%s].\n", RECORD_FILE_NAME);
       theSD.remove(record_file_path);
   }  
-  /* delete */
-  /*
-  if (theSD.exists(pcm_file_path))
-    {
-      printf("Remove existing file [%s].\n", PCM_FILE_NAME);
-      theSD.remove(pcm_file_path);
-    }
-    */
   
   /* Create a new directory */
   theSD.mkdir(SENSOR_DIRECTORY_NAME);
-  theSD.mkdir(WAV_DIRECTORY_NAME);
-  //theSD.mkdir(PCM_DIRECTORY_NAME); /* delete */
+  theSD.mkdir(RECORD_DIRECTORY_NAME);
 
   sensorFile = theSD.open(sensor_file_path, FILE_WRITE);
   s_myFile = theSD.open(record_file_path, FILE_WRITE);
-  //pcmFile = theSD.open(pcm_file_path, FILE_WRITE); /* delete */
 
   /* Verify file open */   
   if (!sensorFile){
@@ -225,13 +208,6 @@ void setup()
     printf("Wav File open error\n");
     exit(1);
   }
-  /* delete */
-  /*
-  if (!pcmFile)
-    {
-      printf("PCM File open error\n");
-      exit(1);
-    }*/
   
   printf("Open! [%s] and [%s]\n", SENSOR_FILE_NAME, RECORD_FILE_NAME);
 
@@ -254,17 +230,6 @@ void setup()
 void signal_process(uint32_t size)
 {
   /* Put any signal process */ 
-  /*
-  printf("Size %d [%02x %02x %02x %02x %02x %02x %02x %02x ...]\n",
-         size,
-         s_buffer[0],
-         s_buffer[1],
-         s_buffer[2],
-         s_buffer[3],
-         s_buffer[4],
-         s_buffer[5],
-         s_buffer[6],
-         s_buffer[7]);*/
   printf("Size %d\n", size);
 }
 
@@ -292,11 +257,11 @@ void execute_frames()
 err_t execute_aframe(uint32_t* size)
 {
   err_t err = theRecorder->readFrames(s_buffer, buffer_size, size);
-
+/*
   if(((err == MEDIARECORDER_ECODE_OK) || (err == MEDIARECORDER_ECODE_INSUFFICIENT_BUFFER_AREA)) && (*size > 0)) 
     {
       signal_process(*size);
-    }
+    }*/
   int ret = s_myFile.write((uint8_t*)&s_buffer, *size);
   if (ret < 0){
     puts("File write error.");
@@ -314,7 +279,7 @@ void loop() {
   /* For BMI160 */
   float acc[3];   //scaled accelerometer values
   float gyro[3];  //scaled Gyro values
-  
+
   /* For Analog mic */
   static int32_t total_size = 0;
   uint32_t read_size = 0;
@@ -328,7 +293,6 @@ void loop() {
   
   /* make a time data to send in string mode */
   sensor_data += String(ms_time,DEC);
-  /*pcm_data += String(ms_time,DEC);*/
 
   /* make a acc data to send in string mode */
   for(int i=0; i<3; i++){
@@ -355,16 +319,6 @@ void loop() {
   else if (read_size>0)
     {
       total_size += read_size;
-      
-      /* make a audio data to send in string mode */
-      /*
-      for(int i=0; i<read_size; i++){
-        pcm_data += ","; 
-        pcm_data += s_buffer[i];
-      }
-      pcm_data += "\n";*/
-      printf("%d", ms_time);
-      
     }
 
   /* This sleep is adjusted by the time to write the audio stream file.
@@ -372,7 +326,7 @@ void loop() {
      being processed at the same time by Application.
   */
   
-//  usleep(10000);
+  //usleep(10000);
 
   /* Stop Recording */
   if (total_size > recoding_size)
@@ -401,24 +355,15 @@ exitRecording:
   puts("Update Header!");
 
   /* Save data to SD card*/
-  //int ret = sensorFile.write((uint8_t*)&s_buffer, read_size);
   int ret = sensorFile.println(sensor_data);
-  
-  //int s_ret = pcmFile.println(pcm_data); /* delete */
-  
+   
   if (ret < 0){
     puts("Sensor file write error.");
     err = MEDIARECORDER_ECODE_FILEACCESS_ERROR;
   }
-  /*
-  if (s_ret < 0){
-    puts("PCM file write error.");
-    err = MEDIARECORDER_ECODE_FILEACCESS_ERROR;
-  }*/
 
   sensorFile.close();
   s_myFile.close();
-  //pcmFile.close(); /* delete */
 
   theRecorder->deactivate();
   theRecorder->end();
