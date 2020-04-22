@@ -21,6 +21,7 @@
 #include <BMI160Gen.h>
 #include <MediaRecorder.h>
 #include <MemoryUtil.h>
+#include <MadgwickAHRS.h>
 
 #define SENSOR_FILE_NAME "sensor_data.txt"
 #define RECORD_FILE_NAME "sound.wav"
@@ -30,6 +31,7 @@
 
 SDClass theSD;
 MediaRecorder *theRecorder;
+Madgwick MadgwickFilter;
 
 /* Define the filename */
 File sensorFile;
@@ -41,7 +43,7 @@ unsigned long ms_time=0;
 /* Data in the string mode */
 String sensor_file_path = SENSOR_DIRECTORY_NAME; /* Data string for save directory */
 String record_file_path = RECORD_DIRECTORY_NAME; /* Data string for save directory */
-String sensor_data = "time, ax, ay, az, gx, gy, gz\n"; /* Data string for acc and gyro*/
+String sensor_data = "time, ax, ay, az, gx, gy, gz, roll[deg/s], pitch[deg/s], yaw[deg/s]\n"; /* Data string for acc and gyro*/
 
 bool ErrEnd = false;
 
@@ -142,6 +144,9 @@ void setup()
 
   /* Set the accelerometer range to 250 degrees/second (or 125, 500, 1000, 2000) */
   BMI160.setGyroRange(250);
+
+  /* Set MadgwickFilter */
+  MadgwickFilter.begin(100); //100Hz
 
   puts("Initializing IMU device...done.");
   
@@ -279,6 +284,7 @@ void loop() {
   /* For BMI160 */
   float acc[3];   //scaled accelerometer values
   float gyro[3];  //scaled Gyro values
+  float rpy[3];   //scaled Gyro values
 
   /* For Analog mic */
   static int32_t total_size = 0;
@@ -290,6 +296,10 @@ void loop() {
   /* read accelerometer and gyro measurements from device, scaled to the configured range */
   BMI160.readAccelerometerScaled(acc[0], acc[1], acc[2]);
   BMI160.readGyroScaled(gyro[0], gyro[1], gyro[2]);
+  MadgwickFilter.updateIMU(gyro[0], gyro[1], gyro[2], acc[0], acc[1], acc[2]);
+  rpy[0] = MadgwickFilter.getRoll();
+  rpy[1] = MadgwickFilter.getPitch();
+  rpy[2] = MadgwickFilter.getYaw();
   
   /* make a time data to send in string mode */
   sensor_data += String(ms_time,DEC);
@@ -300,10 +310,15 @@ void loop() {
     sensor_data += String(acc[i],DEC);
   }
 
-  /* make a gyro data to send in string mode */
   for(int i=0; i<3; i++){
     sensor_data += ","; 
     sensor_data += String(gyro[i],DEC);
+  }
+
+  /* make a gyro data to send in string mode */
+  for(int i=0; i<3; i++){
+    sensor_data += ","; 
+    sensor_data += String(rpy[i],DEC);
   }
   
   sensor_data += "\n";
