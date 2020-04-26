@@ -201,6 +201,7 @@ void setup()
   theSD.mkdir(SENSOR_DIRECTORY_NAME);
   theSD.mkdir(RECORD_DIRECTORY_NAME);
 
+  /* File open */
   sensorFile = theSD.open(sensor_file_path, FILE_WRITE);
   s_myFile = theSD.open(record_file_path, FILE_WRITE);
 
