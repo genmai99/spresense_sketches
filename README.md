@@ -12,7 +12,8 @@ N/A
 N/A
 
 ## Features
-* Action_Recognition_Module: A prototype for my sub reserch theme
+* action_recognition_module: A prototype for my sub reserch theme
+* bmi160: A prototype sketch to use 6 axis sensor
 
 ## Requirement
 ### Hardware requirement
