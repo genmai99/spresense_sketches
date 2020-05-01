@@ -17,25 +17,14 @@
  *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
  
-#include <SDHCI.h>
 #include <BMI160Gen.h>
 #include <MemoryUtil.h>
 #include <MadgwickAHRS.h>
 
-#define SENSOR_DIRECTORY_NAME "bmi160/"
-
-SDClass theSD;
 Madgwick MadgwickFilter;
-
-/* Define the filename */
-File sensorFile;
 
 /* Time in ms unit */
 unsigned long ms_time=0;
-
-/* Data in the string mode */
-String sensor_file_path = SENSOR_DIRECTORY_NAME; /* Data string for save directory */
-String sensor_data = "time, ax, ay, az, gx, gy, gz, roll[deg/s], pitch[deg/s], yaw[deg/s]\n"; /* Data string for acc and gyro*/
 
 int loop_count=0;
 int savefile_no = 0;
@@ -61,24 +50,6 @@ void setup()
 
   puts("Initializing IMU device...done.");
   
-  /* Open file for data write on SD card */
-  while (!theSD.begin()) {
-    ; /* wait until SD card is mounted. */
-  }
-  
-  /* Create a new directory */
-  theSD.mkdir(SENSOR_DIRECTORY_NAME);
-  
-  /* File open */
-  sensorFile = theSD.open(sensor_file_path, FILE_WRITE);
-
-  /* Verify file open */   
-  if (!sensorFile){
-    printf("Sensor File open error\n");
-    exit(1);
-  }
-  
-  printf("Open! [%s]\n", SENSOR_FILE_NAME);  
 }
 
 
@@ -107,27 +78,6 @@ void loop() {
   rpy[1] = MadgwickFilter.getPitch();
   rpy[2] = MadgwickFilter.getYaw();
 
-  
-  /* make a time data to send in string mode */
-  sensor_data += String(ms_time,DEC);
-
-  /* make a acc data to send in string mode */
-  for(int i=0; i<3; i++){
-    sensor_data += ","; 
-    sensor_data += String(acc[i],DEC);
-  }
-
-  for(int i=0; i<3; i++){
-    sensor_data += ","; 
-    sensor_data += String(gyro[i],DEC);
-  }
-
-  /* make a gyro data to send in string mode */
-  for(int i=0; i<3; i++){
-    sensor_data += ","; 
-    sensor_data += String(rpy[i],DEC);
-  }
-  
-  sensor_data += "\n";
+  printf("roll:%f, pitch:%f, yaw:%f\n", rpy[0], rpy[1], rpy[2]);
 
 }
