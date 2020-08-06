@@ -23,10 +23,7 @@
 #include <MemoryUtil.h>
 #include <MadgwickAHRS.h>
 
-#define SENSOR_FILE_NAME "sensor_data.txt"
 #define RECORD_FILE_NAME "sound.wav"
-#define SENSOR_DIRECTORY_NAME "result_sensor/"
-#define RECORD_DIRECTORY_NAME "result_wav/"
 #define ANALOG_MIC_GAIN 210 /* Range:-785(-78.5dB) to 210(+21.0dB) */
 
 SDClass theSD;
@@ -34,18 +31,13 @@ MediaRecorder *theRecorder;
 Madgwick MadgwickFilter;
 
 /* Define the filename */
-File sensorFile;
 File s_myFile;
 
 /* Time in ms unit */
 unsigned long ms_time=0;
 
-/* Data in the string mode */
-String sensor_file_path = SENSOR_DIRECTORY_NAME; /* Data string for save directory */
-String record_file_path = RECORD_DIRECTORY_NAME; /* Data string for save directory */
-String sensor_data = "time, ax, ay, az, gx, gy, gz, roll[deg/s], pitch[deg/s], yaw[deg/s]\n"; /* Data string for acc and gyro*/
-
 bool ErrEnd = false;
+
 
 /**
  * @brief Audio attention callback
@@ -120,7 +112,6 @@ static uint8_t        s_buffer[buffer_size];
 static bool mediarecorder_done_callback(AsRecorderEvent event, uint32_t result, uint32_t sub_result)
 {
   printf("mp cb %x %x %x\n", event, result, sub_result);
-
   return true;
 }
 
@@ -133,7 +124,7 @@ static bool mediarecorder_done_callback(AsRecorderEvent event, uint32_t result, 
  *  System directory "/mnt/sd0/BIN" will be searched for PCM codec
  */
 void setup()
-{
+{ 
   /* initialize IMU160 device */
   puts("Initializing IMU device...");
   BMI160.begin();
@@ -180,42 +171,27 @@ void setup()
                     AS_BITRATE_8000, /* Bitrate is effective only when mp3 recording */
                     "/mnt/sd0/BIN");
 
-  sensor_file_path += SENSOR_FILE_NAME;
-  record_file_path += RECORD_FILE_NAME;
-
+  
   /* Open file for data write on SD card */
   while (!theSD.begin()) {
     ; /* wait until SD card is mounted. */
   }
 
-  if (theSD.exists(sensor_file_path)){
-      printf("Remove existing file [%s].\n", SENSOR_FILE_NAME);
-      theSD.remove(sensor_file_path);
-  }
-  if (theSD.exists(record_file_path)){
+  if (theSD.exists(RECORD_FILE_NAME)){
       printf("Remove existing file [%s].\n", RECORD_FILE_NAME);
-      theSD.remove(record_file_path);
+      theSD.remove(RECORD_FILE_NAME);
   }  
   
-  /* Create a new directory */
-  theSD.mkdir(SENSOR_DIRECTORY_NAME);
-  theSD.mkdir(RECORD_DIRECTORY_NAME);
-
   /* File open */
-  sensorFile = theSD.open(sensor_file_path, FILE_WRITE);
-  s_myFile = theSD.open(record_file_path, FILE_WRITE);
+  s_myFile = theSD.open(RECORD_FILE_NAME, FILE_WRITE);
 
   /* Verify file open */   
-  if (!sensorFile){
-    printf("Sensor File open error\n");
-    exit(1);
-  }
   if (!s_myFile){
     printf("Wav File open error\n");
     exit(1);
   }
   
-  printf("Open! [%s] and [%s]\n", SENSOR_FILE_NAME, RECORD_FILE_NAME);
+  printf("Open! [%s]\n", RECORD_FILE_NAME);
 
   /* Write wav header (Write to top of file. File size is tentative.) */
   theRecorder->writeWavHeader(s_myFile);
@@ -236,7 +212,7 @@ void setup()
 void signal_process(uint32_t size)
 {
   /* Put any signal process */ 
-  printf("Size %d\n", size);
+  /* printf("Size %d\n", size);*/
 }
 
 /**
@@ -285,7 +261,9 @@ void loop() {
   /* For BMI160 */
   float acc[3];   //scaled accelerometer values
   float gyro[3];  //scaled Gyro values
-  float rpy[3];   //scaled Gyro values
+  float roll;
+  float pitch;
+  float yaw;
 
   /* For Analog mic */
   static int32_t total_size = 0;
@@ -298,31 +276,11 @@ void loop() {
   BMI160.readAccelerometerScaled(acc[0], acc[1], acc[2]);
   BMI160.readGyroScaled(gyro[0], gyro[1], gyro[2]);
   MadgwickFilter.updateIMU(gyro[0], gyro[1], gyro[2], acc[0], acc[1], acc[2]);
-  rpy[0] = MadgwickFilter.getRoll();
-  rpy[1] = MadgwickFilter.getPitch();
-  rpy[2] = MadgwickFilter.getYaw();
-  
-  /* make a time data to send in string mode */
-  sensor_data += String(ms_time,DEC);
+  roll = MadgwickFilter.getRoll();
+  pitch = MadgwickFilter.getPitch();
+  yaw = MadgwickFilter.getYaw();
+  printf("%d, %f, %f, %f, %f, %f, %f\n", ms_time, acc[0], acc[1], acc[2], roll, pitch, yaw);
 
-  /* make a acc data to send in string mode */
-  for(int i=0; i<3; i++){
-    sensor_data += ","; 
-    sensor_data += String(acc[i],DEC);
-  }
-
-  for(int i=0; i<3; i++){
-    sensor_data += ","; 
-    sensor_data += String(gyro[i],DEC);
-  }
-
-  /* make a gyro data to send in string mode */
-  for(int i=0; i<3; i++){
-    sensor_data += ","; 
-    sensor_data += String(rpy[i],DEC);
-  }
-  
-  sensor_data += "\n";
 
   /* Execute audio data */
   err_t err = execute_aframe(&read_size);
@@ -369,16 +327,7 @@ exitRecording:
 
   theRecorder->writeWavHeader(s_myFile);
   puts("Update Header!");
-
-  /* Save data to SD card*/
-  int ret = sensorFile.println(sensor_data);
-   
-  if (ret < 0){
-    puts("Sensor file write error.");
-    err = MEDIARECORDER_ECODE_FILEACCESS_ERROR;
-  }
-
-  sensorFile.close();
+  
   s_myFile.close();
 
   theRecorder->deactivate();
